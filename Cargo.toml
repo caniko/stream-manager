@@ -1,0 +1,37 @@
+[workspace]
+members = [".", "crates/core", "crates/chat", "crates/relay", "crates/server"]
+resolver = "2"
+
+[package]
+name = "stream-manager"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Livestream metadata preparation and publishing UI (iced, SQLite, per-destination overrides and funnels)"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "stream-manager"
+path = "src/main.rs"
+
+[dependencies]
+stream-manager-core = { path = "crates/core" }
+stream-manager-chat = { path = "crates/chat" }
+iced = { version = "0.13", features = ["tokio", "image", "qr_code"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+chrono = "0.4"
+qrcode = "0.13"
+# Deliberate: chat event-bus channel shared between the iced subscription
+# worker and the chat transport loops.
+futures-channel = "0.3"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16

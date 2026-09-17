@@ -1,0 +1,41 @@
+[package]
+name = "stream-manager-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "stream-manager headless core: domain, storage, templates, providers, policy"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "stream_manager_core"
+path = "src/lib.rs"
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+chrono-tz = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+anyhow = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+oauth2 = "5"
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = "1"
+url = "2"
+regex = "1"
+qrcode = "0.13"
+# Deliberate additions for the chat credential foundation: AES-GCM file
+# encryption for the runtime token store (chat + metadata OAuth share it).
+aes-gcm = "0.10"
+rand = "0.8"
+base64 = "0.22"
+# Deliberate: kernel file locks for crash-safe cross-process exclusion.
+libc = "0.2"
+
+[dev-dependencies]
+wiremock = "0.6"
+tempfile = "3"
+pretty_assertions = "1"
