@@ -152,7 +152,7 @@
       # an import-from-derivation, forbidden by the check invocation).
       server-module-eval = let
         evaluated = nixpkgs.lib.evalModules {
-          specialArgs = { pkgs = cfg.pkgs; };
+          specialArgs = {pkgs = cfg.pkgs;};
           modules = [
             # Provides the top-level `assertions` option outside NixOS.
             "${nixpkgs}/nixos/modules/misc/assertions.nix"
@@ -164,9 +164,18 @@
               options.systemd.services = lib.mkOption {
                 type = lib.types.attrsOf (lib.types.submodule {
                   options = {
-                    description = lib.mkOption { type = lib.types.str; default = ""; };
-                    wantedBy = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
-                    after = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+                    description = lib.mkOption {
+                      type = lib.types.str;
+                      default = "";
+                    };
+                    wantedBy = lib.mkOption {
+                      type = lib.types.listOf lib.types.str;
+                      default = [];
+                    };
+                    after = lib.mkOption {
+                      type = lib.types.listOf lib.types.str;
+                      default = [];
+                    };
                     serviceConfig = lib.mkOption {
                       type = lib.types.attrsOf lib.types.unspecified;
                       default = {};
@@ -198,17 +207,17 @@
         unit = evaluated.config.systemd.services.stream-manager-server.serviceConfig;
       in
         assert unit.LoadCredential
-          == [
-            "sm-token-key:/run/agenix/test-key"
-            "sm-rumble-api-url:/run/agenix/test-rumble"
-          ];
+        == [
+          "sm-token-key:/run/agenix/test-key"
+          "sm-rumble-api-url:/run/agenix/test-rumble"
+        ];
         assert unit.DynamicUser == true;
         assert unit.StateDirectory == "stream-manager-server";
         assert nixpkgs.lib.hasPrefix "${cfg.pkgs.hello}/bin/stream-manager-server --config "
-          unit.ExecStart;
+        unit.ExecStart;
         assert evaluated.config.services.stream-manager-server.databasePath
-          == "/var/lib/stream-manager-server/app.db";
-        cfg.pkgs.writeText "server-module-eval-ok" "ok";
+        == "/var/lib/stream-manager-server/app.db";
+          cfg.pkgs.writeText "server-module-eval-ok" "ok";
     });
 
     devShells = nixpkgs.lib.genAttrs systems (system: let

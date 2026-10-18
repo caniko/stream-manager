@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib; let
   cfg = config.services.stream-manager-server;
   svc = "stream-manager-server";
@@ -33,18 +38,27 @@ with lib; let
       if cfg.rumbleApiUrlFile != null
       then credPath "rumble-api-url"
       else "";
-    operators = map (o: {
-      id = o.id;
-      role = o.role;
-      token_sha256 = o.tokenSha256;
-      channels = map (c: { provider = c.provider; channel = c.channel; }) o.channels;
-    }) cfg.operators;
-    accounts = map (a: {
-      id = a.id;
-      provider = a.provider;
-      channel_id = a.channelId;
-      channel_name = a.channelName;
-    }) cfg.accounts;
+    operators =
+      map (o: {
+        id = o.id;
+        role = o.role;
+        token_sha256 = o.tokenSha256;
+        channels =
+          map (c: {
+            provider = c.provider;
+            channel = c.channel;
+          })
+          o.channels;
+      })
+      cfg.operators;
+    accounts =
+      map (a: {
+        id = a.id;
+        provider = a.provider;
+        channel_id = a.channelId;
+        channel_name = a.channelName;
+      })
+      cfg.accounts;
   });
   mkCred = name: path: "${cred name}:${path}";
 in {
@@ -68,7 +82,10 @@ in {
     operators = mkOption {
       type = types.listOf (types.submodule {
         options = {
-          id = mkOption { type = types.str; description = "Operator id (e.g. can, dejana)."; };
+          id = mkOption {
+            type = types.str;
+            description = "Operator id (e.g. can, dejana).";
+          };
           role = mkOption {
             type = types.enum ["admin" "operator"];
             description = "admin manages accounts; operator acts on assigned channels only.";
@@ -80,8 +97,8 @@ in {
           channels = mkOption {
             type = types.listOf (types.submodule {
               options = {
-                provider = mkOption { type = types.str; };
-                channel = mkOption { type = types.str; };
+                provider = mkOption {type = types.str;};
+                channel = mkOption {type = types.str;};
               };
             });
             default = [];
@@ -95,10 +112,10 @@ in {
     accounts = mkOption {
       type = types.listOf (types.submodule {
         options = {
-          id = mkOption { type = types.str; };
-          provider = mkOption { type = types.str; };
-          channelId = mkOption { type = types.str; };
-          channelName = mkOption { type = types.str; };
+          id = mkOption {type = types.str;};
+          provider = mkOption {type = types.str;};
+          channelId = mkOption {type = types.str;};
+          channelName = mkOption {type = types.str;};
         };
       });
       default = [];

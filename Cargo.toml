@@ -26,7 +26,10 @@ qrcode = "0.13"
 # worker and the chat transport loops.
 futures-channel = "0.3"
 url = "2"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
 
 [profile.dev]
 opt-level = 0
