@@ -61,14 +61,17 @@ fn bearer_of(headers: &HeaderMap) -> Option<String> {
         .map(str::to_owned)
 }
 
-async fn authed(st: &AppState, headers: &HeaderMap) -> Result<Operator, Response> {
+async fn authed(
+    st: &AppState,
+    headers: &HeaderMap,
+) -> Result<Operator, (StatusCode, &'static str)> {
     let Some(token) = bearer_of(headers) else {
-        return Err((StatusCode::UNAUTHORIZED, "missing bearer").into_response());
+        return Err((StatusCode::UNAUTHORIZED, "missing bearer"));
     };
     let guard = st.state.lock().await;
     match guard.authenticate(&token) {
         Some(op) => Ok(op),
-        None => Err((StatusCode::UNAUTHORIZED, "bad bearer").into_response()),
+        None => Err((StatusCode::UNAUTHORIZED, "bad bearer")),
     }
 }
 
@@ -89,7 +92,7 @@ async fn commands(
 ) -> Response {
     let op = match authed(&st, &headers).await {
         Ok(op) => op,
-        Err(e) => return e,
+        Err(e) => return e.into_response(),
     };
     if cmd.request_id.trim().is_empty() || cmd.request_id.len() > 128 {
         return (
@@ -124,7 +127,7 @@ async fn events(
 ) -> Response {
     let op = match authed(&st, &headers).await {
         Ok(op) => op,
-        Err(e) => return e,
+        Err(e) => return e.into_response(),
     };
     let guard = st.state.lock().await;
     Json(guard.events_since_for(&op, q.cursor)).into_response()
@@ -133,7 +136,7 @@ async fn events(
 async fn snapshot(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let op = match authed(&st, &headers).await {
         Ok(op) => op,
-        Err(e) => return e,
+        Err(e) => return e.into_response(),
     };
     let guard = st.state.lock().await;
     Json(guard.snapshot_for(&op)).into_response()
