@@ -1,0 +1,8 @@
+[ci]
+platform = "github"
+provider = "actions"
+runtime = "nix"
+runner = "ubuntu-24.04"
+workspace = true
+workspace_strategy = "aggregate"
+publish_crates = false
