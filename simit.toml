@@ -6,3 +6,7 @@ runner = "ubuntu-24.04"
 workspace = true
 workspace_strategy = "aggregate"
 publish_crates = false
+
+[ci.cache]
+substituters = ["https://attic.candee.baby/canix", "https://cache.nixos.org"]
+trusted_public_keys = ["canix:lPzPzKrmYqW5Rxa5r0uQWvCqD3S5nx0h2eCy7XD5JM8=", "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="]
