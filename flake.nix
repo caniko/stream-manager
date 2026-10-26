@@ -2,7 +2,7 @@
   description = "stream-manager — livestream metadata preparation and publishing UI (iced)";
 
   inputs = {
-    harbor-rs.url = "github:caniko/harbor-rs/trunk";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
     nixpkgs.follows = "harbor-rs/nixpkgs";
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
