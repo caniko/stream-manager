@@ -3,10 +3,9 @@
 `stream-manager` is a native Rust/iced desktop app where an operator prepares
 an upcoming livestream, edits per-destination metadata, and publishes it to
 several platforms from one UI. It is deliberately metadata-oriented: the MVP
-handles titles, descriptions, tags, thumbnails and funnels per destination,
-stores them in SQLite, and applies them through provider APIs. Video ingest,
-forwarding and stream keys stay with InstantClone, and the app never replaces
-OBS.
+handles titles, descriptions, tags and funnels per destination, stores them in
+SQLite, and applies them through provider APIs. Video ingest, forwarding and
+stream keys stay with InstantClone, and the app never replaces OBS.
 
 ## Problem
 
@@ -73,13 +72,13 @@ to answer from one place.
 
 ## Direction
 
-The repository's commit history is a single large feature landing plus
-in-progress work on provider adapters (Twitch, Kick, Rumble), relay
-protocol and server state. The chat handoff document lists what remains
-externally blocked: OAuth app registration, runtime key and Kick secret
-provisioning, and Rumble API URL setup — operator steps, not code. Recent
-design scripts add p7/p8 chat layouts for medium and narrow widths. Live
-masking remains the next designed phase, gated on its acceptance tests.
+The repository's history is a single large feature landing, with follow-up work
+in progress on provider adapters (Twitch, Kick, Rumble), relay protocol and
+server state. The chat handoff document lists what remains externally blocked:
+OAuth app registration, runtime key and Kick secret provisioning, and Rumble
+API URL setup — operator steps, not code. Recent design scripts add p7/p8 chat
+layouts for medium and narrow widths. Live masking remains the next designed
+phase, gated on its acceptance tests.
 
 ## Place in the fleet
 
