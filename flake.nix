@@ -6,8 +6,14 @@
     nixpkgs.follows = "harbor-rs/nixpkgs";
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
-    treefmt-nix.follows = "harbor-rs/treefmt-nix";
-    git-hooks.follows = "harbor-rs/git-hooks";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
