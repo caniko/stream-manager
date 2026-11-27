@@ -164,6 +164,7 @@ pre { margin: 8px 0 0; font: 11px/1.45 var(--mono); color: var(--muted); white-s
 const $ = id => document.getElementById(id);
 const C = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--bad)", idle: "var(--idle)" };
 let status = null, layout = null, dirtyUntil = 0, drag = null, sendTimer = null;
+let sending = false, sendPending = false;
 const srcAspect = () => { const i = $("img-src"); return i.naturalWidth ? i.naturalWidth / i.naturalHeight : 16 / 9; };
 
 function dur(s) {
@@ -242,7 +243,7 @@ function render(st) {
   $("log").textContent = log.length ? log.join("\n") : "No messages.";
   $("log-meta").textContent = pl.restarts ? `· ${pl.restarts} restart${pl.restarts === 1 ? "" : "s"}` : "";
 
-  if (!drag && Date.now() > dirtyUntil) { layout = structuredClone(st.layout); drawRegions(); }
+  if (!drag && !sending && !sendTimer && !sendPending && Date.now() > dirtyUntil) { layout = structuredClone(st.layout); drawRegions(); }
 }
 
 async function poll() {
@@ -256,6 +257,7 @@ async function poll() {
     for (const d of ["d-atlas", "d-nomad", "d-relay"]) setDot(d, C.idle);
   }
   refreshPreviews();
+  setTimeout(poll, 1000);
 }
 
 function refreshPreviews() {
@@ -297,14 +299,22 @@ function commit(immediate) {
   sendTimer = setTimeout(send, immediate ? 0 : 120);
 }
 async function send() {
+  sendTimer = null;
+  if (sending) { sendPending = true; return; }
+  sendPending = false;
+  sending = true;
   const body = JSON.stringify(layout);
   try {
     const r = await fetch("/api/layout", { method: "POST", headers: { "content-type": "application/json" }, body });
     const j = await r.json().catch(() => ({}));
     $("frame-error").hidden = r.ok;
     if (!r.ok) { $("frame-error").textContent = j.error || `Rejected (${r.status})`; return; }
-    $("applied").textContent = { live: "Applied live", restarting: "Restarting encoder…", saved: "Saved" }[j.applied] || "";
+    $("applied").textContent = { queued: "Queued for live update", restarting: "Restarting encoder…", saved: "Saved" }[j.applied] || "";
   } catch (_) { $("frame-error").hidden = false; $("frame-error").textContent = "Nomad unreachable; framing not saved"; }
+  finally {
+    sending = false;
+    if (sendPending && !sendTimer) send();
+  }
 }
 function startDrag(ev, which, resize) {
   ev.preventDefault(); ev.stopPropagation();
@@ -357,7 +367,6 @@ for (const b of document.querySelectorAll("[data-copy]")) b.addEventListener("cl
 });
 
 poll();
-setInterval(poll, 1000);
 </script>
 </body>
 </html>

@@ -12,6 +12,7 @@ use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::process::{ChildStdin, Command, Stdio};
+use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -95,6 +96,34 @@ impl Default for Layout {
             },
         }
     }
+}
+
+// Keep only the latest desired layout. Return one command at a time so a
+// slow or stalled FFmpeg never builds up a queue of obsolete positions.
+fn next_crop_command(applied: &mut Layout, desired: &Layout) -> Option<String> {
+    for (name, old, new) in [
+        ("game", &mut applied.game, desired.game),
+        ("cam", &mut applied.cam, desired.cam),
+    ] {
+        if name == "cam" && desired.mode != Mode::Split {
+            break;
+        }
+        for ((old, new), (key, expression)) in [
+            (&mut old.w, new.w),
+            (&mut old.h, new.h),
+            (&mut old.x, new.x),
+            (&mut old.y, new.y),
+        ]
+        .into_iter()
+        .zip(new.crop())
+        {
+            if *old != new {
+                *old = new;
+                return Some(format!("ccrop@{name} -1 {key} {expression}\n"));
+            }
+        }
+    }
+    None
 }
 
 struct Program {
@@ -236,7 +265,7 @@ fn ffmpeg_args(cfg: &Config, layout: &Layout) -> Vec<String> {
         "-progress",
         "pipe:1",
         "-stats_period",
-        "1",
+        "0.1",
     ]
     .map(String::from)
     .to_vec();
@@ -378,7 +407,7 @@ fn supervise(cfg: Arc<Config>, state: State) {
             s.progress.clear();
             s.out_time_us = 0;
             s.last_advance = None;
-            s.restart = false;
+            s.restart = s.layout != layout;
             s.set_state("waiting");
         }
         let stdout = child.stdout.take().expect("piped stdout");
@@ -422,8 +451,12 @@ fn supervise(cfg: Arc<Config>, state: State) {
         });
         let stderr = child.stderr.take().expect("piped stderr");
         let st = state.clone();
+        let (crop_ack, crop_replies) = sync_channel(1);
         std::thread::spawn(move || {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                if line.starts_with("Command reply ") && line.contains(" ret:0 ") {
+                    let _ = crop_ack.try_send(());
+                }
                 // Echoes of the framing command channel; not news.
                 if line.trim().is_empty()
                     || line.starts_with("Command reply")
@@ -442,12 +475,28 @@ fn supervise(cfg: Arc<Config>, state: State) {
 
         let mut quit_at: Option<Instant> = None;
         let mut requested = false;
+        let mut applied = layout;
+        let mut pending: Option<Instant> = None;
         let status = loop {
-            std::thread::sleep(Duration::from_millis(200));
+            std::thread::sleep(Duration::from_millis(50));
             if let Ok(Some(status)) = child.try_wait() {
                 break status;
             }
             let mut s = lock(&state);
+            if pending.is_some() && crop_replies.try_recv().is_ok() {
+                pending = None;
+            }
+            if pending.is_some_and(|t| t.elapsed() > Duration::from_secs(2)) {
+                s.restart = true;
+            }
+            if cfg.portrait.is_some() && s.state == "live" && !s.restart && pending.is_none() {
+                if let Some(command) = next_crop_command(&mut applied, &s.layout) {
+                    match s.stdin.as_mut().map(|i| i.write_all(command.as_bytes())) {
+                        Some(Ok(())) => pending = Some(Instant::now()),
+                        _ => s.restart = true,
+                    }
+                }
+            }
             if s.restart && quit_at.is_none() {
                 requested = true;
                 quit_at = Some(Instant::now());
@@ -495,7 +544,7 @@ fn apply_layout(cfg: &Config, state: &State, layout: Layout) -> Result<&'static 
     save_layout(cfg, &layout).map_err(|e| format!("cannot save layout: {e}"))?;
     let mut s = lock(state);
     let reshaped = s.layout.mode != layout.mode;
-    s.layout = layout.clone();
+    s.layout = layout;
     if cfg.portrait.is_none() {
         return Ok("saved");
     }
@@ -507,25 +556,7 @@ fn apply_layout(cfg: &Config, state: &State, layout: Layout) -> Result<&'static 
             "saved"
         });
     }
-    let mut regions = vec![("game", layout.game)];
-    if layout.mode == Mode::Split {
-        regions.push(("cam", layout.cam));
-    }
-    let commands: String = regions
-        .iter()
-        .flat_map(|(name, r)| r.crop().map(|(k, v)| format!("ccrop@{name} -1 {k} {v}\n")))
-        .collect();
-    match s
-        .stdin
-        .as_mut()
-        .map(|i| i.write_all(commands.as_bytes()).and_then(|_| i.flush()))
-    {
-        Some(Ok(())) => Ok("live"),
-        _ => {
-            s.restart = true;
-            Ok("restarting")
-        }
-    }
+    Ok(if s.restart { "restarting" } else { "queued" })
 }
 
 fn layout_path(cfg: &Config) -> PathBuf {
@@ -725,6 +756,25 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crop_commands_use_only_the_latest_changed_fields() {
+        let mut applied = Layout::default();
+        let mut desired = applied.clone();
+        desired.game.x = 0.2;
+        desired.game.y = 0.1;
+        assert_eq!(
+            next_crop_command(&mut applied, &desired).as_deref(),
+            Some("ccrop@game -1 x iw*0.200000\n")
+        );
+        desired.game.y = 0.3;
+        desired.cam.x = 0.1; // Not in the Full graph.
+        assert_eq!(
+            next_crop_command(&mut applied, &desired).as_deref(),
+            Some("ccrop@game -1 y ih*0.300000\n")
+        );
+        assert_eq!(next_crop_command(&mut applied, &desired), None);
+    }
 
     #[test]
     fn graphs_name_every_output_and_crop() {
