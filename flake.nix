@@ -70,7 +70,12 @@
         libXrandr
         libxcb
       ];
-      src = craneLib.cleanCargoSource ./.;
+      src = pkgs.lib.cleanSourceWith {
+        src = ./.;
+        # The OBS dock is embedded by the offload binary.
+        filter = path: type:
+          path == toString ./crates/offload/src/dock.html || craneLib.filterCargoSources path type;
+      };
       commonArgs = {
         inherit src;
         pname = "stream-manager";
@@ -112,8 +117,24 @@
           cargoExtraArgs = "--bin stream-manager-server";
           meta.mainProgram = "stream-manager-server";
         });
+      offloadArgs = {
+        inherit src;
+        pname = "stream-offload";
+        version = "0.1.0";
+        strictDeps = true;
+        cargoExtraArgs = "--locked -p stream-offload";
+      };
+      offload = craneLib.buildPackage (offloadArgs
+        // {
+          cargoArtifacts = craneLib.buildDepsOnly offloadArgs;
+          meta = {
+            description = "Turn one SRT contribution into landscape and portrait programs, with an OBS dock";
+            license = pkgs.lib.licenses.mit;
+            mainProgram = "stream-offload";
+          };
+        });
     in {
-      inherit pkgs toolchain craneLib cargoConfig cross treefmtEval pre-commit-check package relay server cargoArtifacts guiLibs;
+      inherit pkgs toolchain craneLib cargoConfig cross treefmtEval pre-commit-check package relay server offload src cargoArtifacts guiLibs;
     };
   in {
     packages = nixpkgs.lib.genAttrs systems (system: {
@@ -121,6 +142,7 @@
       stream-manager = (forSystem system).package;
       kick-chat-relay = (forSystem system).relay;
       stream-manager-server = (forSystem system).server;
+      stream-offload = (forSystem system).offload;
     });
 
     apps = nixpkgs.lib.genAttrs systems (system: let
@@ -142,7 +164,7 @@
       default = cfg.package;
       formatting = cfg.treefmtEval.config.build.check self;
       clippy = cfg.craneLib.cargoClippy {
-        src = cfg.craneLib.cleanCargoSource ./.;
+        inherit (cfg) src;
         pname = "stream-manager-clippy";
         version = "0.1.0";
         strictDeps = true;

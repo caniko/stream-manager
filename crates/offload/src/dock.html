@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nomad Offload</title>
+<style>
+:root {
+  --bg: #15171c; --panel: #1c1f26; --panel-2: #232731; --line: #2d323e;
+  --text: #e7e9ee; --muted: #8b92a3; --faint: #5d6474;
+  --ok: #3ccf8e; --warn: #f0b429; --bad: #f2555a; --idle: #6b7385;
+  --game: #6ea8ff; --cam: #c792ea; --radius: 10px;
+  --mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", "Inter", sans-serif; }
+body { padding: 10px; display: grid; gap: 10px; min-width: 260px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* header */
+.head { display: flex; align-items: center; gap: 10px; }
+.title { font-weight: 650; font-size: 14px; }
+.pill { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+  border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.pill.pulse::before { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pill.pulse::before { animation: none; } }
+
+/* signal path */
+.path { list-style: none; margin: 0; padding: 0; position: relative; }
+.path li { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; position: relative; }
+.path li + li::before { content: ""; position: absolute; left: 6px; top: -9px; height: 18px; width: 2px; background: var(--line); }
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--c, var(--idle)); background: color-mix(in srgb, var(--c, var(--idle)) 25%, transparent); }
+.path .name { font-weight: 600; }
+.path .sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path .metric { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+
+/* programs */
+.programs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.prog { background: var(--panel-2); border-radius: 8px; padding: 9px 10px; display: grid; gap: 6px; }
+.prog .top { display: flex; align-items: baseline; gap: 6px; }
+.prog .label { font-weight: 650; }
+.prog .aspect { font-size: 11px; color: var(--faint); font-family: var(--mono); }
+.prog .rate { margin-left: auto; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.dests { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; min-height: 10px; }
+.dests i { width: 8px; height: 8px; border-radius: 2px; background: var(--idle); }
+.dests i.on { background: var(--ok); }
+.dests span { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.tag { font-size: 11px; color: var(--muted); }
+.tag b { color: var(--text); font-weight: 600; }
+
+/* framing */
+.seg { display: inline-flex; background: var(--panel-2); border-radius: 8px; padding: 2px; }
+.seg button { all: unset; cursor: pointer; padding: 4px 12px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--line); color: var(--text); }
+.seg button:focus-visible, .btn:focus-visible { outline: 2px solid var(--game); outline-offset: 1px; }
+.stage { display: grid; grid-template-columns: 1fr 24%; gap: 8px; align-items: start; margin-top: 8px; }
+.frame { position: relative; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background:
+  repeating-linear-gradient(45deg, #1a1d23 0 10px, #1e2128 10px 20px); touch-action: none; user-select: none; }
+.frame img, .phone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
+.frame .empty, .phone .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 11px; text-align: center; padding: 6px; }
+.region { position: absolute; border: 2px solid var(--c); border-radius: 3px; cursor: grab;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.0); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.region:active { cursor: grabbing; }
+.region .tagline { position: absolute; left: -2px; top: -2px; transform: translateY(-100%); font-size: 10px; font-weight: 700;
+  background: var(--c); color: #0b0d12; padding: 1px 5px; border-radius: 3px 3px 0 0; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.region.inside .tagline { transform: none; border-radius: 0 0 3px 0; }
+.region .handle { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; border-radius: 3px; background: var(--c); cursor: nwse-resize; }
+.region[hidden] { display: none; }
+.phone { position: relative; aspect-ratio: 9 / 16; border-radius: 6px; overflow: hidden; background: #0e1014; border: 1px solid var(--line); }
+.foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.btn { all: unset; cursor: pointer; font-size: 12px; padding: 4px 10px; border-radius: 6px; background: var(--panel-2); color: var(--text); }
+.btn:hover { background: var(--line); }
+.applied { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+/* setup + log */
+.kv { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 12px; }
+.kv code { font-family: var(--mono); background: var(--panel-2); padding: 3px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+pre { margin: 8px 0 0; font: 11px/1.45 var(--mono); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
+.error { color: var(--bad); font-size: 12px; margin-top: 6px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="card head">
+  <div>
+    <div class="title">Nomad offload</div>
+    <div class="muted" id="subtitle">Connecting…</div>
+  </div>
+  <span class="pill" id="pill" style="--c: var(--idle)">…</span>
+</header>
+
+<section class="card" aria-labelledby="h-path">
+  <h2 id="h-path">Signal path</h2>
+  <ol class="path">
+    <li><span class="dot" id="d-atlas"></span><div class="grow"><div class="name">Atlas OBS</div><div class="sub" id="s-atlas">SRT contribution</div></div><span class="metric" id="m-atlas"></span></li>
+    <li><span class="dot" id="d-nomad"></span><div class="grow"><div class="name">Nomad encode</div><div class="sub" id="s-nomad"></div></div><span class="metric" id="m-nomad"></span></li>
+    <li><span class="dot" id="d-relay"></span><div class="grow"><div class="name">Relays</div><div class="sub" id="s-relay"></div></div><span class="metric" id="m-relay"></span></li>
+  </ol>
+</section>
+
+<section class="card" aria-labelledby="h-prog">
+  <h2 id="h-prog">Programs</h2>
+  <div class="programs" id="programs"></div>
+</section>
+
+<section class="card" id="framing" aria-labelledby="h-frame">
+  <div class="row">
+    <h2 id="h-frame" class="grow" style="margin:0">Portrait framing</h2>
+    <div class="seg" role="group" aria-label="Portrait layout">
+      <button type="button" data-mode="full" aria-pressed="true">Full</button>
+      <button type="button" data-mode="split" aria-pressed="false">Cam + game</button>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="frame" id="frame">
+      <img id="img-src" alt="" hidden>
+      <div class="empty" id="empty-src">Source preview appears when Atlas is sending</div>
+      <div class="region" id="r-cam" style="--c: var(--cam)" hidden><span class="tagline">Cam</span><span class="handle" aria-hidden="true"></span></div>
+      <div class="region" id="r-game" style="--c: var(--game)"><span class="tagline">Game</span><span class="handle" aria-hidden="true"></span></div>
+    </div>
+    <div class="phone" aria-label="Portrait program preview">
+      <img id="img-portrait" alt="" hidden>
+      <div class="empty" id="empty-portrait">9:16</div>
+    </div>
+  </div>
+  <div class="foot">
+    <button type="button" class="btn" id="center">Center</button>
+    <button type="button" class="btn" id="reset">Reset</button>
+    <span class="applied" id="applied" aria-live="polite"></span>
+  </div>
+  <div class="error" id="frame-error" hidden></div>
+</section>
+
+<section class="card" id="setup" hidden aria-labelledby="h-setup">
+  <h2 id="h-setup">Atlas OBS stream settings</h2>
+  <div class="kv">
+    <span class="muted">Service</span><code>Custom…</code><span></span>
+    <span class="muted">Server</span><code id="srt-url"></code><button type="button" class="btn" data-copy="srt-url">Copy</button>
+    <span class="muted">Stream key</span><code>(leave empty)</code><span></span>
+    <span class="muted">Output</span><code>Advanced · FFmpeg VAAPI HEVC · CBR 20000 Kbps · keyframe 2 s</code><span></span>
+  </div>
+</section>
+
+<section class="card">
+  <details id="log-box">
+    <summary>Encoder log <span id="log-meta" class="muted"></span></summary>
+    <pre id="log">No messages.</pre>
+  </details>
+</section>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const C = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--bad)", idle: "var(--idle)" };
+let status = null, layout = null, dirtyUntil = 0, drag = null, sendTimer = null;
+let sending = false, sendPending = false;
+const srcAspect = () => { const i = $("img-src"); return i.naturalWidth ? i.naturalWidth / i.naturalHeight : 16 / 9; };
+
+function dur(s) {
+  if (s == null) return "";
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
+}
+const mbps = k => k == null ? "–" : (k / 1000).toFixed(1) + " Mb/s";
+function setDot(id, c) { $(id).style.setProperty("--c", c); }
+function pill(text, c, pulse) { const p = $("pill"); p.textContent = text; p.style.setProperty("--c", c); p.classList.toggle("pulse", !!pulse); }
+
+function delayText(r) {
+  if (!r) return "";
+  if (r.phase === "active") return `delay <b>${Math.round((r.current_delay_ms || 0) / 1000)} s</b>`;
+  if (r.phase === "ready") return "delay <b>armed</b>";
+  if (r.phase === "preparing") return "delay <b>arming</b>";
+  return "real time";
+}
+
+function renderPrograms(st) {
+  const el = $("programs"); el.textContent = "";
+  for (const [key, label, aspect] of [["landscape", "Landscape", "16:9"], ["portrait", "Portrait", "9:16"]]) {
+    const p = st[key];
+    if (!p) continue;
+    const r = p.relay, box = document.createElement("div");
+    box.className = "prog";
+    const total = r ? r.destinations_total : 0, alive = r ? r.destinations_alive : 0;
+    const dots = Array.from({ length: total }, (_, i) => `<i class="${i < alive ? "on" : ""}"></i>`).join("");
+    const state = !r ? "relay offline" : !r.ingest_alive ? "no ingest" : total === 0 ? "no destinations" : `${alive}/${total} sending`;
+    box.innerHTML = `<div class="top"><span class="label">${label}</span><span class="aspect">${aspect}</span>
+      <span class="rate">${r && r.ingest_alive ? mbps(r.bitrate_kbps) : "–"}</span></div>
+      <div class="dests">${dots}<span>${state}</span></div>
+      <div class="tag">${delayText(r)} · target <b>${mbps(p.kbps)}</b></div>`;
+    el.append(box);
+  }
+}
+
+function render(st) {
+  status = st;
+  const pl = st.pipeline, live = pl.state === "live", flowing = live || pl.state === "stalled";
+  const relays = [st.landscape, st.portrait].filter(Boolean).map(p => p.relay);
+  const alive = relays.reduce((n, r) => n + (r ? r.destinations_alive : 0), 0);
+  const total = relays.reduce((n, r) => n + (r ? r.destinations_total : 0), 0);
+  const ingest = relays.filter(r => r && r.ingest_alive).length;
+
+  if (live && alive > 0) pill("On air", C.ok, true);
+  else if (live) pill("Flowing", C.ok);
+  else if (pl.state === "stalled") pill("Stalled", C.warn, true);
+  else if (pl.state === "waiting") pill("Standby", C.idle);
+  else pill("Restarting", C.bad);
+  $("subtitle").textContent = flowing ? `${pl.state === "live" ? "Live" : "Stalled"} for ${dur(pl.for_s)}`
+    : pl.state === "waiting" ? "Waiting for Atlas to start streaming" : (pl.last_exit || "Restarting encoder");
+
+  setDot("d-atlas", live ? C.ok : pl.state === "stalled" ? C.warn : C.idle);
+  $("s-atlas").textContent = flowing ? "Receiving over SRT" : `Listening on :${st.srt_port}`;
+  $("m-atlas").textContent = flowing ? dur(pl.for_s) : "";
+
+  const speed = pl.speed, drops = (pl.drop || 0);
+  const slow = live && speed != null && speed < 0.97;
+  setDot("d-nomad", !flowing ? (pl.state === "waiting" ? C.idle : C.bad) : slow || drops > 0 ? C.warn : C.ok);
+  $("s-nomad").textContent = st.encoder + (flowing && drops ? ` · ${drops} dropped` : "");
+  $("m-nomad").textContent = flowing && pl.fps != null ? `${Math.round(pl.fps)} fps · ${speed != null ? speed.toFixed(2) + "×" : "–"}` : "";
+
+  const expected = relays.length;
+  setDot("d-relay", relays.some(r => !r) ? C.bad : !flowing ? C.idle : ingest < expected ? C.warn : alive > 0 ? C.ok : C.warn);
+  $("s-relay").textContent = relays.some(r => !r) ? "A relay is offline on Nomad"
+    : total === 0 ? "No destinations configured" : `${alive} of ${total} destinations sending`;
+  $("m-relay").textContent = `${ingest}/${expected} in`;
+
+  renderPrograms(st);
+  $("framing").hidden = !st.portrait;
+  $("setup").hidden = flowing;
+  $("srt-url").textContent = `srt://${location.hostname}:${st.srt_port}?mode=caller`;
+
+  const log = (pl.last_exit ? [pl.last_exit] : []).concat(pl.log || []);
+  $("log").textContent = log.length ? log.join("\n") : "No messages.";
+  $("log-meta").textContent = pl.restarts ? `· ${pl.restarts} restart${pl.restarts === 1 ? "" : "s"}` : "";
+
+  if (!drag && !sending && !sendTimer && !sendPending && Date.now() > dirtyUntil) { layout = structuredClone(st.layout); drawRegions(); }
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/status", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    render(await r.json());
+  } catch (_) {
+    pill("Offline", C.bad);
+    $("subtitle").textContent = "Cannot reach Nomad";
+    for (const d of ["d-atlas", "d-nomad", "d-relay"]) setDot(d, C.idle);
+  }
+  refreshPreviews();
+  setTimeout(poll, 1000);
+}
+
+function refreshPreviews() {
+  const flowing = status && ["live", "stalled"].includes(status.pipeline.state);
+  for (const [img, empty, url] of [["img-src", "empty-src", "/preview/src.jpg"], ["img-portrait", "empty-portrait", "/preview/portrait.jpg"]]) {
+    if (!flowing) { $(img).hidden = true; $(empty).hidden = false; continue; }
+    const next = new Image();
+    next.onload = () => { $(img).src = next.src; $(img).hidden = false; $(empty).hidden = true; };
+    next.src = `${url}?t=${Date.now()}`;
+  }
+}
+
+/* ---- framing ---- */
+function bandAspect(which) {
+  const [w, h] = status ? status.portrait_size : [1080, 1920], band = status ? status.cam_band : 608;
+  if (which === "cam") return w / band;
+  return layout.mode === "split" ? w / (h - band) : w / h;
+}
+/* Keep a region's pixel aspect equal to its band, inside the frame. */
+function fit(which, r) {
+  const k = srcAspect() / bandAspect(which);          // h = w * k (fractions)
+  let w = Math.min(Math.max(r.w, 0.06), 1, 1 / k), h = w * k;
+  if (h < 0.06) { h = 0.06; w = h / k; }
+  return { w, h, x: Math.min(Math.max(r.x, 0), 1 - w), y: Math.min(Math.max(r.y, 0), 1 - h) };
+}
+function drawRegions() {
+  if (!layout) return;
+  for (const b of document.querySelectorAll(".seg button")) b.setAttribute("aria-pressed", String(b.dataset.mode === layout.mode));
+  for (const which of ["game", "cam"]) {
+    const el = $("r-" + which), r = layout[which];
+    el.hidden = which === "cam" && layout.mode !== "split";
+    Object.assign(el.style, { left: r.x * 100 + "%", top: r.y * 100 + "%", width: r.w * 100 + "%", height: r.h * 100 + "%" });
+    el.classList.toggle("inside", r.y < 0.06);
+  }
+}
+function commit(immediate) {
+  dirtyUntil = Date.now() + 2500;
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(send, immediate ? 0 : 120);
+}
+async function send() {
+  sendTimer = null;
+  if (sending) { sendPending = true; return; }
+  sendPending = false;
+  sending = true;
+  const body = JSON.stringify(layout);
+  try {
+    const r = await fetch("/api/layout", { method: "POST", headers: { "content-type": "application/json" }, body });
+    const j = await r.json().catch(() => ({}));
+    $("frame-error").hidden = r.ok;
+    if (!r.ok) { $("frame-error").textContent = j.error || `Rejected (${r.status})`; return; }
+    $("applied").textContent = { queued: "Queued for live update", restarting: "Restarting encoder…", saved: "Saved" }[j.applied] || "";
+  } catch (_) { $("frame-error").hidden = false; $("frame-error").textContent = "Nomad unreachable; framing not saved"; }
+  finally {
+    sending = false;
+    if (sendPending && !sendTimer) send();
+  }
+}
+function startDrag(ev, which, resize) {
+  ev.preventDefault(); ev.stopPropagation();
+  const box = $("frame").getBoundingClientRect();
+  drag = { which, resize, box, x0: ev.clientX, y0: ev.clientY, r0: { ...layout[which] } };
+  ev.target.setPointerCapture(ev.pointerId);
+}
+function moveDrag(ev) {
+  if (!drag) return;
+  const dx = (ev.clientX - drag.x0) / drag.box.width, dy = (ev.clientY - drag.y0) / drag.box.height, r0 = drag.r0;
+  layout[drag.which] = fit(drag.which, drag.resize ? { ...r0, w: r0.w + dx } : { ...r0, x: r0.x + dx, y: r0.y + dy });
+  drawRegions(); commit(false);
+}
+function endDrag() { if (drag) { drag = null; commit(true); } }
+for (const which of ["game", "cam"]) {
+  const el = $("r-" + which);
+  el.addEventListener("pointerdown", ev => startDrag(ev, which, ev.target.classList.contains("handle")));
+  el.addEventListener("pointermove", moveDrag);
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
+}
+for (const b of document.querySelectorAll(".seg button")) b.addEventListener("click", () => {
+  if (!layout || layout.mode === b.dataset.mode) return;
+  layout.mode = b.dataset.mode;
+  layout.game = fit("game", layout.game); layout.cam = fit("cam", layout.cam);
+  drawRegions(); commit(true);
+});
+$("center").addEventListener("click", () => {
+  if (!layout) return;
+  layout.game = fit("game", { ...layout.game, x: (1 - layout.game.w) / 2 }); drawRegions(); commit(true);
+});
+$("reset").addEventListener("click", () => {
+  if (!layout) return;
+  layout.game = fit("game", { x: 0, y: 0, w: 1, h: 1 }); layout.game.x = (1 - layout.game.w) / 2;
+  layout.cam = fit("cam", { x: 0.72, y: 0.03, w: 0.25, h: 0.25 });
+  drawRegions(); commit(true);
+});
+// Ultrawide canvases (21:9) would otherwise stretch into the 16:9 frame.
+$("img-src").addEventListener("load", () => { $("frame").style.aspectRatio = srcAspect(); });
+$("img-src").addEventListener("load", () => {
+  // Re-fit to the real source aspect once it is known.
+  if (!layout || drag) return;
+  const g = fit("game", layout.game), c = fit("cam", layout.cam);
+  if (Math.abs(g.h - layout.game.h) > 0.002 || Math.abs(c.h - layout.cam.h) > 0.002) { layout.game = g; layout.cam = c; drawRegions(); commit(true); }
+}, { once: true });
+for (const b of document.querySelectorAll("[data-copy]")) b.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($(b.dataset.copy).textContent); b.textContent = "Copied"; }
+  catch (_) { getSelection().selectAllChildren($(b.dataset.copy)); b.textContent = "Ctrl+C"; }
+  setTimeout(() => b.textContent = "Copy", 1500);
+});
+
+poll();
+</script>
+</body>
+</html>
