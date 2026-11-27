@@ -1,0 +1,13 @@
+[package]
+name = "stream-offload"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Turn one SRT contribution into landscape and portrait programs, with an OBS dock"
+license = "MIT"
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tiny_http = "0.12"

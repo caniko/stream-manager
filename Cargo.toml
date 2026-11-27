@@ -1,6 +1,17 @@
 [workspace]
-members = [".", "crates/core", "crates/chat", "crates/relay", "crates/server"]
+members = [
+  ".",
+  "crates/core",
+  "crates/chat",
+  "crates/relay",
+  "crates/server",
+  "crates/offload",
+]
 resolver = "2"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [package]
 name = "stream-manager"
@@ -19,7 +30,7 @@ stream-manager-core = { path = "crates/core" }
 stream-manager-chat = { path = "crates/chat" }
 iced = { version = "0.13", features = ["tokio", "image", "qr_code"] }
 tokio = { version = "1", features = ["full"] }
-serde_json = "1"
+serde_json.workspace = true
 chrono = "0.4"
 qrcode = "0.13"
 # Deliberate: chat event-bus channel shared between the iced subscription
